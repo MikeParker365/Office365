@@ -7,7 +7,9 @@ LicenseAndHold.ps1 - Licenses/Delicenses Office 365 users and enables Litigation
 Version 1.0, 6th January, 2016
 Revision History
 ---------------------------------------------------------------------
-1.0	Initial release
+1.0 	- Initial release
+
+1.1     - Made setting the litigation hold an optional switch
 
 Author/Copyright:    Mike Parker - All rights reserved
 Email/Blog/Twitter:  mike@mikeparker365.co.uk | www.mikeparker365.co.uk | @MikeParker365
@@ -20,11 +22,14 @@ The script will prompt the user for a CSV file via File Explorer. This file need
 Use scenario is for when migrating to Office 365 and want to migrate batches of users just for litigation hold purposes, this process will be useful for managing the process.
 Designed for use with any Office 365 license SKU that creates a mailbox.
 	
-.PARAMETER License
+.PARAMETER LicenseSKU
 Specifies the license SKU to enable for the users in the batch.
 
 .PARAMETER Enable
 Enables the user license and enables litigation hold for the newly created mailbox.
+
+.PARAMETER Hold
+Enables Litigation Hold on the new mailbox.
 
 .PARAMETER Disable
 Removes the specified license from the Office 365 User.
@@ -51,6 +56,9 @@ param (
 
 	[Parameter( Mandatory=$false )]
 	[switch]$Enable,
+
+	[Parameter( Mandatory=$false )]
+	[switch]$Hold,
 
 	[Parameter( Mandatory=$false )]
 	[switch]$Disable
@@ -98,7 +106,7 @@ function Get-FileName($initialDirectory) {
 
 $myDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-$logfile = "$myDir\Add-SMTPAddresses.log"
+$logfile = "$myDir\LicenseAndHold.log"
 
 $start = Get-Date
 
@@ -125,6 +133,8 @@ Foreach ($Li in $Licenses){
 
 $newLicenseSKU = $tenantID + ":" + $LicenseSKU
 
+$newLicense = New-MsolLicenseOptions -AccountSkuID $newLicenseSKU -DisabledPlans $null
+
 $itemCount = Import-Csv $UserList
 $itemCount = $itemCount.count
 $processedCount = 1
@@ -132,7 +142,8 @@ $processedCount = 1
 if($Enable){
 
 	Write-LogFile "Option to enable users selected..."
-	import-CSV $UserList | ForEach-Object{
+	#foreach ($user in @(import-CSV $UserList))
+	import-CSV $UserList | ForEach-Object {
 		$error.Clear()
 
 		Write-Progress -Activity "Processing.." -Status "User $processedCount of $itemCount" -PercentComplete ($processedCount / $itemCount * 100)
@@ -157,11 +168,38 @@ if($Enable){
 
 				$currentLicense = $User.Licenses
 				Write-Logfile "User has an existing license:"
-				Write-Logfile $currentLicense
+				Write-Logfile $currentLicense.AccountSkuID
 
+				if((($currentLicense.AccountSkyID).ToLower()) -eq $newLicense) {
+				Try{
+					$error.clear()
+					Write-Logfile "Updating the user license..."
+					Set-MsolUserLicense –User $upn -LicenseOptions $newLicense
+					 
+				}
+				Catch 
+				{
+					#deal with any errors
+					Write-Logfile "ERROR - There was an error setting the license for $UPN."
+					Write-Logfile "ERROR details - $error"
+				}
+				Finally{ 
+					if(!$error){
+						Write-Logfile "Successfully assigned license for user $UPN"
+						$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Success" 
+						$licenseSet = $true
+					}
+					else{
+						Write-Logfile "There was an error setting the licenses for user $UPN. Review the log."
+						Write-Logfile "The latest error logged was - $error"
+						$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Failure" 
+
+					}
+				}
+
+					}
 				Write-Logfile "Moving to next user..."
 
-				break
 
 			} # End of IF USER NOT LICENSED
 			else {
@@ -197,7 +235,7 @@ if($Enable){
 				}
 			}
 
-			If($licenseSet -eq $true){
+			If($licenseSet -and $Hold){
 				Write-Logfile "Waiting for mailbox to be provisioned..."
 				do {
 					sleep -seconds 1
