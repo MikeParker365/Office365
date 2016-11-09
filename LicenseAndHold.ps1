@@ -8,8 +8,8 @@ Version 1.0, 6th January, 2016
 Revision History
 ---------------------------------------------------------------------
 1.0 	- Initial release
-
 1.1     - Made setting the litigation hold an optional switch
+1.2		- Bug Fixes
 
 Author/Copyright:    Mike Parker - All rights reserved
 Email/Blog/Twitter:  mike@mikeparker365.co.uk | www.mikeparker365.co.uk | @MikeParker365
@@ -104,6 +104,8 @@ function Get-FileName($initialDirectory) {
 # Variables Start 
 ############################################################################
 
+$scriptVersion = "1.2"
+
 $myDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $logfile = "$myDir\LicenseAndHold.log"
@@ -170,34 +172,37 @@ if($Enable){
 				Write-Logfile "User has an existing license:"
 				Write-Logfile $currentLicense.AccountSkuID
 
-				if((($currentLicense.AccountSkyID).ToLower()) -eq $newLicense) {
-				Try{
-					$error.clear()
-					Write-Logfile "Updating the user license..."
-					Set-MsolUserLicense –User $upn -LicenseOptions $newLicense
+				if((($currentLicense.AccountSkuID).ToLower()) -eq $newLicenseSku) {
+					Try{
+						$error.clear()
+						Write-Logfile "Updating the user license..."
+						Set-MsolUserLicense –User $upn -LicenseOptions $newLicense
 					 
-				}
-				Catch 
-				{
-					#deal with any errors
-					Write-Logfile "ERROR - There was an error setting the license for $UPN."
-					Write-Logfile "ERROR details - $error"
-				}
-				Finally{ 
-					if(!$error){
-						Write-Logfile "Successfully assigned license for user $UPN"
-						$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Success" 
-						$licenseSet = $true
 					}
-					else{
-						Write-Logfile "There was an error setting the licenses for user $UPN. Review the log."
-						Write-Logfile "The latest error logged was - $error"
-						$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Failure" 
+					Catch 
+					{
+						#deal with any errors
+						Write-Logfile "ERROR - There was an error setting the license for $UPN."
+						Write-Logfile "ERROR details - $error"
+					}
+					Finally{ 
+						if(!$error){
+							Write-Logfile "Successfully assigned license for user $UPN"
+							$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Success" 
+							$licenseSet = $true
+						}
+						else{
+							Write-Logfile "There was an error setting the licenses for user $UPN. Review the log."
+							Write-Logfile "The latest error logged was - $error"
+							$datastring = $UPN + ",None," + $newLicenseSKU + "," + "Failure" 
 
+						}
 					}
-				}
 
-					}
+				}
+				Else{
+					Write-Logfile "The licenses are not compatible. Please check and re-run."
+				}
 				Write-Logfile "Moving to next user..."
 
 
